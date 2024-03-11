@@ -4,15 +4,87 @@ from torch.utils.data import DataLoader, TensorDataset
 import pandas as pd
 from tqdm import tqdm
 
+num_epochs = 10
+batch_size = 64
+learning_rate = 5e-5
+max_length = 100
+num_labels = 6
+
+def train(model, data_loader, optimizer, device, loss_fn=None):
+    model.train()
+    total_loss = 0.
+    progress_bar = tqdm(enumerate(data_loader), total=len(data_loader))
+    for step, batch in progress_bar:
+        batch = [item.to(device) for item in batch]
+        input_ids, token_type_ids, attention_mask, labels = batch
+
+        optimizer.zero_grad()
+        outputs = model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids, labels=labels.to(torch.int64))
+        loss = outputs.loss
+        loss.backward()
+        optimizer.step()
+
+        total_loss += loss.item()
+        if step % 100 == 0:
+            print(f"Step {step}: Loss = {loss.item():.4f}")
+
+    avg_loss = total_loss / len(data_loader)
+    print(f"Average loss: {avg_loss:.4f}")
+
+
+def evaluate(model, data_loader, device):
+    model.eval()
+    total_loss = 0
+    with torch.no_grad():
+        for step, batch in enumerate(data_loader):
+            batch = [item.to(device) for item in batch]
+            input_ids, token_type_ids, attention_mask, labels = batch
+
+            outputs = model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids, labels=labels.to(torch.int64))
+            loss = outputs.loss
+            total_loss += loss.item()
+
+    avg_loss = total_loss / len(data_loader)
+    return avg_loss
+
+
+def test(model, data_loader, device, loss_fn=None):
+    model.eval()  
+    total_loss = 0
+    total_correct = 0
+    total_samples = 0
+    progress_bar = tqdm(enumerate(data_loader), total=len(data_loader))
+    with torch.no_grad(): 
+        for step, batch in progress_bar:
+            batch = [item.to(device) for item in batch]
+            input_ids, token_type_ids, attention_mask, labels = batch
+
+            outputs = model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids, labels=labels.to(torch.int64))
+            loss = outputs.loss
+            total_loss += loss.item()
+
+            logits = outputs.logits
+            predictions = torch.argmax(logits, dim=-1)
+            total_correct += (predictions == labels).sum().item()
+            total_samples += labels.size(0)
+    
+    avg_loss = total_loss / len(data_loader)
+    accuracy = total_correct / total_samples
+    print(f"Test Loss: {avg_loss:.4f}, Accuracy: {accuracy:.4f}")
+
+    return avg_loss, accuracy
+
+
+column_names = ['text1', 'text2', 'labels']
+df_train = pd.read_csv('Chinese-STS-B/sts-b-train.txt', sep='\t', names=column_names)
+df_dev = pd.read_csv('Chinese-STS-B/sts-b-dev.txt', sep='\t', names=column_names)
+df_test = pd.read_csv('Chinese-STS-B/sts-b-test.txt', sep='\t', names=column_names)
+
 tokenizer = BertTokenizer.from_pretrained(
     pretrained_model_name_or_path='bert-base-chinese',
     cache_dir=None,
     force_download=False,
 )
-column_names = ['text1', 'text2', 'labels']
-df_train = pd.read_csv('Chinese-STS-B/sts-b-train.txt', sep='\t', names=column_names)
-df_dev = pd.read_csv('Chinese-STS-B/sts-b-dev.txt', sep='\t', names=column_names)
-df_test = pd.read_csv('Chinese-STS-B/sts-b-test.txt', sep='\t', names=column_names)
 
 def encoder(df):
     train_data_encoded = tokenizer.batch_encode_plus(
@@ -20,51 +92,41 @@ def encoder(df):
     add_special_tokens=True,
     truncation=True,
     padding='max_length', 
-    max_length=30,
+    max_length=max_length,
     return_tensors='pt'
 )
 
     train_labels = df['labels'].values.tolist()
     return train_data_encoded, train_labels
+if __name__ == '__main__':
+    train_data, train_labels = encoder(df_train)
+    input_ids = train_data['input_ids']
+    token_type_ids = train_data['token_type_ids']
+    attention_mask = train_data['attention_mask']
+    train_labels = torch.Tensor(train_labels)
+
+    dataset = TensorDataset(input_ids, token_type_ids, attention_mask, train_labels)
+    data_loader = DataLoader(dataset, batch_size=batch_size)
+    model = BertForSequenceClassification.from_pretrained('bert-base-chinese', num_labels=num_labels)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    loss_fn = torch.nn.CrossEntropyLoss()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-train_data, train_labels = encoder(df_train)
-input_ids = train_data['input_ids']
-token_type_ids = train_data['token_type_ids']
-attention_mask = train_data['attention_mask']
-train_labels = torch.Tensor(train_labels)
+    model.to(device)
+    model.train()
+    for epoch in range(num_epochs):  
+        print(f"Epoch {epoch+1}/{num_epochs}")
+        train(model=model, data_loader=data_loader, optimizer=optimizer, device=device, loss_fn=None)
+    torch.save(model.state_dict(), 'model_5e')
 
-# 创建数据集和数据加载器
-dataset = TensorDataset(input_ids, token_type_ids, attention_mask, train_labels)
-data_loader = DataLoader(dataset, batch_size=32)
-model = BertForSequenceClassification.from_pretrained('bert-base-chinese', num_labels=6)
-optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5)
-loss_fn = torch.nn.CrossEntropyLoss()
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-num_epochs = 3
+    test_data, test_labels = encoder(df_test)
+    test_input_ids = test_data['input_ids']
+    test_token_type_ids = test_data['token_type_ids']
+    test_attention_mask = test_data['attention_mask']
+    test_labels = torch.Tensor(test_labels)
 
-model.to(device)
-model.train()
-for epoch in range(num_epochs):  # 如果需要多个epoch
-    print(f"Epoch {epoch+1}/{num_epochs}")
-    progress_bar = tqdm(enumerate(data_loader), total=len(data_loader))
-    for step, batch in progress_bar:
-        batch = [item.to(device) for item in batch]
-        input_ids, token_type_ids, attention_mask, labels = batch
-
-        model.zero_grad()  
-
-        outputs = model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids, labels=labels.to(torch.int64))
-        loss = outputs.loss
-
-        loss.backward()
-        optimizer.step()
-
-        # 更新进度条
-        progress_bar.set_description(f"Loss: {loss.item():.4f}")
-
-        # 每隔100步打印loss
-        if step % 100 == 0:
-            print(f"Step {step}: Loss = {loss.item():.4f}")
-
+    dataset = TensorDataset(test_input_ids, test_token_type_ids, test_attention_mask, test_labels)
+    data_loader = DataLoader(dataset, batch_size=batch_size)
+    test(model=model, data_loader=data_loader, device=device, loss_fn=None)
