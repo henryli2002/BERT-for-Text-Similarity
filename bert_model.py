@@ -107,9 +107,9 @@ def main():
     # for epoch in range(num_epochs):  
     #     print(f"Epoch {epoch+1}/{num_epochs}")
     #     train(model=model, data_loader=data_loader, optimizer=optimizer, device=device, loss_fn=None)
-    # torch.save(model.state_dict(), f'model_{epoch}e')
+    # torch.save(model.state_dict(), f'model_{epoch}e.pth')
 
-    model.load_state_dict('model-5e')
+    model.load_state_dict(torch.load('model_5e.pth'))
     test_data, test_labels = encoder(df_test)
     test_input_ids = test_data['input_ids']
     test_token_type_ids = test_data['token_type_ids']
@@ -120,11 +120,12 @@ def main():
     data_loader = DataLoader(dataset, batch_size=batch_size)
     results_list = test(model=model, data_loader=data_loader, device=device, loss_fn=None)
     results_df = pd.DataFrame(results_list, columns=['predictions'])
-
-    assert len(df_train) == len(results_df), "原始数据和测试结果数量不匹配！"
-
+    print(df_test.values,len(df_test))
+    print(results_df.values, len(results_df))
+    assert len(df_test) == len(results_df), "原始数据和测试结果数量不匹配！"
+    
     final_df = pd.concat([df_test, results_df], axis=1)
-    final_df.to_csv('test_results.txt', sep='\t', index=False, header=True, encoding='utf-8')
+    final_df.to_csv('./output/bert_output.txt', sep='\t', index=False, header=True, encoding='utf-8')
 
 if __name__ == "__main__":
     main()
