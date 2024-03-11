@@ -32,27 +32,13 @@ def train(model, data_loader, optimizer, device, loss_fn=None):
     print(f"Average loss: {avg_loss:.4f}")
 
 
-def evaluate(model, data_loader, device):
-    model.eval()
-    total_loss = 0
-    with torch.no_grad():
-        for step, batch in enumerate(data_loader):
-            batch = [item.to(device) for item in batch]
-            input_ids, token_type_ids, attention_mask, labels = batch
-
-            outputs = model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids, labels=labels.to(torch.int64))
-            loss = outputs.loss
-            total_loss += loss.item()
-
-    avg_loss = total_loss / len(data_loader)
-    return avg_loss
-
 
 def test(model, data_loader, device, loss_fn=None):
     model.eval()  
     total_loss = 0
     total_correct = 0
     total_samples = 0
+    results_list = [] 
     progress_bar = tqdm(enumerate(data_loader), total=len(data_loader))
     with torch.no_grad(): 
         for step, batch in progress_bar:
@@ -67,12 +53,13 @@ def test(model, data_loader, device, loss_fn=None):
             predictions = torch.argmax(logits, dim=-1)
             total_correct += (predictions == labels).sum().item()
             total_samples += labels.size(0)
-    
+            results_list.extend(predictions.cpu().numpy())
+
     avg_loss = total_loss / len(data_loader)
     accuracy = total_correct / total_samples
     print(f"Test Loss: {avg_loss:.4f}, Accuracy: {accuracy:.4f}")
 
-    return avg_loss, accuracy
+    return results_list
 
 
 column_names = ['text1', 'text2', 'labels']
@@ -98,7 +85,9 @@ def encoder(df):
 
     train_labels = df['labels'].values.tolist()
     return train_data_encoded, train_labels
-if __name__ == '__main__':
+
+
+def main():
     train_data, train_labels = encoder(df_train)
     input_ids = train_data['input_ids']
     token_type_ids = train_data['token_type_ids']
@@ -114,13 +103,13 @@ if __name__ == '__main__':
 
 
     model.to(device)
-    model.train()
-    for epoch in range(num_epochs):  
-        print(f"Epoch {epoch+1}/{num_epochs}")
-        train(model=model, data_loader=data_loader, optimizer=optimizer, device=device, loss_fn=None)
-    torch.save(model.state_dict(), 'model_5e')
+    # model.train()
+    # for epoch in range(num_epochs):  
+    #     print(f"Epoch {epoch+1}/{num_epochs}")
+    #     train(model=model, data_loader=data_loader, optimizer=optimizer, device=device, loss_fn=None)
+    # torch.save(model.state_dict(), f'model_{epoch}e')
 
-
+    model.load_state_dict('model-5e')
     test_data, test_labels = encoder(df_test)
     test_input_ids = test_data['input_ids']
     test_token_type_ids = test_data['token_type_ids']
@@ -129,4 +118,13 @@ if __name__ == '__main__':
 
     dataset = TensorDataset(test_input_ids, test_token_type_ids, test_attention_mask, test_labels)
     data_loader = DataLoader(dataset, batch_size=batch_size)
-    test(model=model, data_loader=data_loader, device=device, loss_fn=None)
+    results_list = test(model=model, data_loader=data_loader, device=device, loss_fn=None)
+    results_df = pd.DataFrame(results_list, columns=['predictions'])
+
+    assert len(df_train) == len(results_df), "原始数据和测试结果数量不匹配！"
+
+    final_df = pd.concat([df_test, results_df], axis=1)
+    final_df.to_csv('test_results.txt', sep='\t', index=False, header=True, encoding='utf-8')
+
+if __name__ == "__main__":
+    main()
