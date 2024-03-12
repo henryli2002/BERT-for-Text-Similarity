@@ -34,6 +34,7 @@ def train(model, data_loader, optimizer, device, loss_fn=None):
     optimizer: 优化器
     device: 设备（CPU或CUDA）
     loss_fn: 损失函数（可选，如果模型内部已定义，则不需要，目前还没有实现）
+    loss_fn: 损失函数（可选，如果模型内部已定义，则不需要，目前还没有实现）
     """
     model.train()
     total_loss = 0.
