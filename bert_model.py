@@ -5,7 +5,7 @@ import pandas as pd
 from tqdm import tqdm
 
 # 图像处理部分
-from sklearn.metrics import roc_curve, auc, confusion_matrix
+from sklearn.metrics import confusion_matrix
 from sklearn.metrics import f1_score, recall_score
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -33,7 +33,6 @@ def train(model, data_loader, optimizer, device, loss_fn=None):
     data_loader: 数据加载器
     optimizer: 优化器
     device: 设备（CPU或CUDA）
-    loss_fn: 损失函数（可选，如果模型内部已定义，则不需要，目前还没有实现）
     loss_fn: 损失函数（可选，如果模型内部已定义，则不需要，目前还没有实现）
     """
     model.train()
