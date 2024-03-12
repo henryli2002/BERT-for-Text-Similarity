@@ -4,6 +4,13 @@ from torch.utils.data import DataLoader, TensorDataset
 import pandas as pd
 from tqdm import tqdm
 
+# 图像处理部分
+from sklearn.metrics import roc_curve, auc, confusion_matrix
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+import pandas as pd
+
 # 定义训练的参数
 num_epochs = 10
 batch_size = 64
@@ -19,7 +26,7 @@ def train(model, data_loader, optimizer, device, loss_fn=None):
     data_loader: 数据加载器
     optimizer: 优化器
     device: 设备（CPU或CUDA）
-    loss_fn: 损失函数（可选，如果模型内部已定义，则不需要）
+    loss_fn: 损失函数（可选，如果模型内部已定义，则不需要，目前还没有实现）
     """
     model.train()
     total_loss = 0.
@@ -44,12 +51,15 @@ def train(model, data_loader, optimizer, device, loss_fn=None):
 # 测试函数
 def test(model, data_loader, device, loss_fn=None):
     """评估模型的函数
-    参数同上
+    model: 要训练的模型
+    data_loader: 数据加载器
+    device: 设备（CPU或CUDA）
     """
     model.eval()
     total_loss = 0
     total_correct = 0
     total_samples = 0
+    labels_list = []
     results_list = []  # 用于收集预测结果
     progress_bar = tqdm(enumerate(data_loader), total=len(data_loader))
     with torch.no_grad():
@@ -65,13 +75,38 @@ def test(model, data_loader, device, loss_fn=None):
             predictions = torch.argmax(logits, dim=-1)  # 获得预测结果
             total_correct += (predictions == labels).sum().item()
             total_samples += labels.size(0)
+
+            labels_list.extend(labels.cpu().numpy())
             results_list.extend(predictions.cpu().numpy())  # 收集预测结果
 
     avg_loss = total_loss / len(data_loader)
     accuracy = total_correct / total_samples
     print(f"Test Loss: {avg_loss:.4f}, Accuracy: {accuracy:.4f}")
 
-    return results_list  # 返回预测结果列表
+    return labels_list,results_list  # 返回预测结果列表
+
+def plot_metrics(labels, predictions, num_classes=6):
+    # 绘制混淆矩阵
+    cm = confusion_matrix(labels, predictions, labels=range(num_classes))
+    plt.figure(figsize=(10, 7))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+    plt.title('Confusion Matrix')
+    plt.ylabel('True Label')
+    plt.xlabel('Predicted Label')
+    plt.show()
+
+    # 绘制标签和预测的分布柱状图
+    labels_df = pd.DataFrame({'Labels': labels, 'Category': 'True'})
+    predictions_df = pd.DataFrame({'Labels': predictions, 'Category': 'Predicted'})
+    combined_df = pd.concat([labels_df, predictions_df])
+
+    plt.figure(figsize=(10, 6))
+    sns.countplot(data=combined_df, x='Labels', hue='Category')
+    plt.title('Distribution of True Labels vs Predictions')
+    plt.xlabel('Label')
+    plt.ylabel('Count')
+    plt.show()
+
 
 # 主函数
 def main():
@@ -119,19 +154,25 @@ def main():
 
     # 训练过程
     model.to(device)
+    ''' 如需训练，则去掉注释
     for epoch in range(num_epochs):  
         print(f"Epoch {epoch+1}/{num_epochs}")
         train(model=model, data_loader=data_loader, optimizer=optimizer, device=device)
 
     # 保存和加载模型，此处需要手动改模型路径
     torch.save(model.state_dict(), f'model_{epoch}e.pth')
+    '''
     model.load_state_dict(torch.load('model_5e.pth')) 
 
     # 测试过程
     test_data, test_labels = encoder(df_test)
     test_dataset = TensorDataset(test_data['input_ids'], test_data['token_type_ids'], test_data['attention_mask'], torch.Tensor(test_labels))
     test_data_loader = DataLoader(test_dataset, batch_size=batch_size)
-    results_list = test(model=model, data_loader=test_data_loader, device=device)
+    labels_list, results_list = test(model, test_data_loader, device)
+    
+    # 绘制图像
+    plot_metrics(labels_list, results_list, num_classes=6)
+
 
     # 保存测试结果
     results_df = pd.DataFrame(results_list, columns=['predictions'])
