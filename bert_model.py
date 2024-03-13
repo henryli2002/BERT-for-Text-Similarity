@@ -57,7 +57,15 @@ def train(model, data_loader, optimizer, device, loss_fn=None):
 
 
 # 测试函数
-def test(model, data_loader, device, dev=False, biclass=False):
+def test(model, data_loader, device, dev=False, bi_class=False):
+    """测试模型的函数
+    参数:
+    model: 要测试的模型
+    data_loader: 数据加载器
+    device: 设备（CPU或CUDA）
+    dev: 是否是验证模式
+    bi_class: 是否转化为2分类验证
+    """
     model.eval()
     total_loss = 0
     labels_list = []
@@ -74,7 +82,7 @@ def test(model, data_loader, device, dev=False, biclass=False):
 
             logits = outputs.logits
             predictions = torch.argmax(logits, dim=-1)
-            if(biclass):
+            if bi_class:
                  # 将标签映射为二分类问题
                 binary_labels = (labels >= 3).to(torch.int64)
                 binary_predictions = (predictions >= 3).to(torch.int64)
@@ -84,12 +92,17 @@ def test(model, data_loader, device, dev=False, biclass=False):
             else:
                 labels_list.extend(labels.cpu().numpy())
                 results_list.extend(predictions.cpu().numpy())
-
-    avg_loss = total_loss / len(data_loader)
-    accuracy = (np.array(labels_list) == np.array(results_list)).mean()
-    f1 = f1_score(labels_list, results_list, average='weighted')  # 计算加权F1分数
-    recall = recall_score(labels_list, results_list, average='weighted')  # 计算加权召回率
-
+    if bi_class:
+        avg_loss = total_loss / len(data_loader)
+        accuracy = (np.array(labels_list) == np.array(results_list)).mean()
+        f1 = f1_score(labels_list, results_list, average='binary')  # 计算加权F1分数
+        recall = recall_score(labels_list, results_list, average='binary')  # 计算加权召回率
+    else:
+        avg_loss = total_loss / len(data_loader)
+        accuracy = (np.array(labels_list) == np.array(results_list)).mean()
+        f1 = f1_score(labels_list, results_list, average='weighted')  # 计算加权F1分数
+        recall = recall_score(labels_list, results_list, average='weighted')  # 计算加权召回率
+        
     print(f"Test Loss: {avg_loss:.4f}, Accuracy: {accuracy:.4f}, F1 Score: {f1:.4f}, Recall: {recall:.4f}")
 
     if dev == True:
@@ -196,7 +209,7 @@ def main():
     test_data, test_labels = encoder(df_test)
     test_dataset = TensorDataset(test_data['input_ids'], test_data['token_type_ids'], test_data['attention_mask'], torch.Tensor(test_labels))
     test_data_loader = DataLoader(test_dataset, batch_size=batch_size)
-    labels_list, results_list = test(model, test_data_loader, device, biclass=True)
+    labels_list, results_list = test(model, test_data_loader, device, bi_class=True)
 
     # 绘制图像
     plot_metrics(labels_list, results_list, num_classes=6)
