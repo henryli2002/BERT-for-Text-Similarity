@@ -119,6 +119,7 @@ def plot_metrics(labels, predictions, num_classes=6):
     plt.title('Confusion Matrix')
     plt.ylabel('True Label')
     plt.xlabel('Predicted Label')
+    plt.savefig(f'./pic/Confusion_Matrix_{num_classes}.png')
     plt.show()
 
     # 绘制标签和预测的分布柱状图
@@ -131,6 +132,7 @@ def plot_metrics(labels, predictions, num_classes=6):
     plt.title('Distribution of True Labels vs Predictions')
     plt.xlabel('Label')
     plt.ylabel('Count')
+    plt.savefig(f'./pic/Distribution_{num_classes}.png')
     plt.show()
 
  # 数据编码
@@ -209,11 +211,12 @@ def main():
     test_data, test_labels = encoder(df_test)
     test_dataset = TensorDataset(test_data['input_ids'], test_data['token_type_ids'], test_data['attention_mask'], torch.Tensor(test_labels))
     test_data_loader = DataLoader(test_dataset, batch_size=batch_size)
-    labels_list, results_list = test(model, test_data_loader, device, bi_class=True)
+    labels_list, results_list = test(model, test_data_loader, device)  # 按标签6分类算
+    labels_list_bi, results_list_bi = test(model, test_data_loader, device, bi_class=True)  # 如果按照2分类算
 
     # 绘制图像
     plot_metrics(labels_list, results_list, num_classes=6)
-
+    plot_metrics(labels_list_bi, results_list_bi, num_classes=2)  
 
     # 保存测试结果
     results_df = pd.DataFrame(results_list, columns=['predictions'])
