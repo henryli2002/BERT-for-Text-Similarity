@@ -10,7 +10,6 @@ from sklearn.metrics import f1_score, recall_score
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
-import pandas as pd
 
 # 定义训练的参数
 num_epochs = 10
